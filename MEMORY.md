@@ -19,6 +19,35 @@
 
 ## Change Log
 
+### 2026-03-04 — Comprehensive fine-tuning accuracy improvements (Phase 1-3)
+
+- **What**: Overhauled fine-tuning pipeline to fix accuracy regressions and improve overall search quality
+- **Why**: Fine-tuned model showed strong visual search (Recall@1=85%) but weak semantic search (Recall@1=58%) due to mismatches between training and inference
+- **Changes**:
+  - **Phase 1 (Fix Mismatches)**:
+    - Reused `augment_description()` from ingestion pipeline (text template now includes `unit` field)
+    - Reused `find_product_images()` from ingestion (now uses BOTH `with.background/` and `without.background/` folders)
+    - Added 6 random text templates per sample (matches query expansion variants + extra diversity)
+  - **Phase 2 (Training Improvements)**:
+    - Added LR warmup (10%) + cosine decay schedule via `get_cosine_schedule_with_warmup`
+    - Added per-SKU image cap (`--max-images-per-sku`, default 6) to prevent training imbalance
+    - Changed default args: `lr=5e-6` (was 1e-5), `epochs=12` (was 5), added `--seed=42`
+    - Added reproducibility seeding
+  - **Phase 3 (Evaluation Fix)**:
+    - Added query expansion to semantic evaluation (mirrors runtime `_semantic_query_embedding`)
+    - Eval now accurately reflects real-world search accuracy
+- **Files modified**:
+  - `scripts/fine_tune_clip.py`: All Phase 1+2 changes
+  - `scripts/evaluate_search.py`: Added `build_semantic_embedding()` helper and query expansion in eval
+- **New CLI defaults**:
+  - `--epochs 12` (was 5)
+  - `--lr 5e-6` (was 1e-5)
+  - `--output-dir model/fine_tuned_clip_v2` (was data/fine_tuned_clip)
+  - `--warmup-ratio 0.1` (new)
+  - `--max-images-per-sku 6` (new)
+  - `--seed 42` (new)
+- **Expected impact**: Visual +2-5%, Semantic +10-20% (from ~58% to ~70-78% Recall@1)
+
 ### 2026-03-03 — Hardened fine-tune model loading fallback for missing local path
 
 - **What**: Updated `scripts/fine_tune_clip.py` to resolve `--model-name` more safely and auto-fallback when a configured local path does not exist

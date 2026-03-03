@@ -8,6 +8,7 @@ and measuring whether the correct product appears in top-K results.
 Usage:
     python scripts/evaluate_search.py --images-dir <path> --top-k 5
 """
+
 import argparse
 import json
 import logging
@@ -20,7 +21,7 @@ import numpy as np
 
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
-from backend.config import INDEX_DIR, METADATA_PATH
+from backend.config import INDEX_DIR, METADATA_PATH, QUERY_EXPANSION_ENABLED
 from backend.models.clip_model import CLIPEmbedder
 from backend.search.engine import SearchEngine
 
@@ -37,9 +38,31 @@ def find_test_images(images_dir: Path, wise_code: str) -> list[Path]:
     with_bg_dir = images_dir / "with.background"
     if with_bg_dir.exists():
         for f in with_bg_dir.iterdir():
-            if f.stem.startswith(code_no_dash) and f.suffix.lower() in {".jpg", ".jpeg", ".png"}:
+            if f.stem.startswith(code_no_dash) and f.suffix.lower() in {
+                ".jpg",
+                ".jpeg",
+                ".png",
+            }:
                 results.append(f)
     return results
+
+
+def build_semantic_embedding(clip, query: str) -> np.ndarray:
+    """Build semantic query embedding with optional expansion.
+
+    Mirrors backend/main.py's _semantic_query_embedding() to ensure
+    evaluation accurately reflects runtime behavior.
+    """
+    if QUERY_EXPANSION_ENABLED:
+        variants = [
+            query,
+            f"A photo of {query}",
+            f"Industrial {query} spare part",
+        ]
+        embeddings = [clip.embed_text(variant) for variant in variants]
+        avg = np.mean(embeddings, axis=0)
+        return avg / np.linalg.norm(avg)
+    return clip.embed_text(query)
 
 
 def evaluate_visual_search(engine, clip, test_data, top_k=5):
@@ -80,13 +103,16 @@ def evaluate_visual_search(engine, clip, test_data, top_k=5):
 
 
 def evaluate_semantic_search(engine, clip, test_data, top_k=5):
-    """Evaluate semantic search: use product description as query."""
+    """Evaluate semantic search: use product description as query.
+
+    Uses query expansion (same as runtime) to get accurate metrics.
+    """
     hits_at_1 = 0
     hits_at_k = 0
     reciprocal_ranks = []
 
     for item in test_data:
-        query_emb = clip.embed_text(item["description"])
+        query_emb = build_semantic_embedding(clip, item["description"])
         results = engine.semantic_search(query_emb, top_k=top_k)
         result_codes = [r["wise_code"] for r in results]
         target = item["wise_code"]
@@ -114,7 +140,9 @@ def main():
     parser = argparse.ArgumentParser(description="AI.AS Search Evaluation")
     parser.add_argument("--images-dir", required=True)
     parser.add_argument("--top-k", type=int, default=5)
-    parser.add_argument("--sample-size", type=int, default=100, help="Max products to test (0=all)")
+    parser.add_argument(
+        "--sample-size", type=int, default=100, help="Max products to test (0=all)"
+    )
     parser.add_argument("--seed", type=int, default=42)
     args = parser.parse_args()
 
@@ -137,11 +165,13 @@ def main():
             continue
         images = find_test_images(images_dir, product["wise_code"])
         if images:
-            test_data.append({
-                "wise_code": product["wise_code"],
-                "description": product["description"],
-                "image_path": images[0],
-            })
+            test_data.append(
+                {
+                    "wise_code": product["wise_code"],
+                    "description": product["description"],
+                    "image_path": images[0],
+                }
+            )
 
     if args.sample_size > 0 and len(test_data) > args.sample_size:
         random.seed(args.seed)
