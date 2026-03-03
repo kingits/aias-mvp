@@ -1,13 +1,21 @@
 """AI.AS MVP - Configuration"""
+
 import os
 from pathlib import Path
 
 BASE_DIR = Path(__file__).resolve().parent.parent
 DATA_DIR = BASE_DIR / "data"
 INDEX_DIR = DATA_DIR / "index"
+UPLOAD_DIR = DATA_DIR / "uploads"
+UPLOADED_IMAGES_DIR = DATA_DIR / "images" / "uploaded"
 # Images: ใช้ env var หรือ default ไปที่ sample data ข้างนอก project
 _default_images = BASE_DIR.parent / "ตัวอย่างภาพสินค้า1K"
-IMAGES_DIR = Path(os.getenv("AIAS_IMAGES_DIR", str(_default_images if _default_images.exists() else DATA_DIR / "images")))
+IMAGES_DIR = Path(
+    os.getenv(
+        "AIAS_IMAGES_DIR",
+        str(_default_images if _default_images.exists() else DATA_DIR / "images"),
+    )
+)
 
 # CLIP Model
 CLIP_MODEL_NAME = "openai/clip-vit-large-patch14"
@@ -39,4 +47,5 @@ DEBUG = os.getenv("AIAS_DEBUG", "true").lower() == "true"
 
 # Image
 MAX_IMAGE_SIZE = 10 * 1024 * 1024  # 10MB
+MAX_UPLOAD_SIZE = 500 * 1024 * 1024  # 500MB
 ALLOWED_EXTENSIONS = {".jpg", ".jpeg", ".png", ".gif", ".bmp", ".webp"}

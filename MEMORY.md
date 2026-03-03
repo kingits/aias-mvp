@@ -19,6 +19,96 @@
 
 ## Change Log
 
+### 2026-03-03 — Started Sub-task 6: LoRA dependency + evaluation smoke run
+
+- **What**: Added `peft>=0.7.0` to `requirements.txt` and installed `peft` in local virtualenv
+- **Why**: Unblock LoRA fine-tuning flow in `scripts/fine_tune_clip.py` without requiring manual dependency install per session
+- **Validation**:
+  - `venv/bin/python scripts/fine_tune_clip.py --help` runs successfully
+  - Ran a quick evaluation smoke test (`sample-size=10`) against current index:
+    - Visual: Recall@1=80.0%, Recall@5=100.0%, MRR=0.8583, avg latency=512.0ms
+    - Semantic: Recall@1=80.0%, Recall@5=100.0%, MRR=0.8833
+  - Results file refreshed at `data/index/eval_results.json`
+- **Execution note**:
+  - Attempted to run one-epoch fine-tuning (`scripts/fine_tune_clip.py --epochs 1`) on CPU; process started successfully (dataset loaded + LoRA initialized) but exceeded session timeout during training loop
+  - Full fine-tuning should be run in a longer session or on GPU hardware
+
+### 2026-03-03 — Added uploaded-image fallback in image serving endpoint
+
+- **What**: Updated `GET /api/images/{image_type}/{filename}` in `backend/main.py` to fall back to `data/images/uploaded/<upload_id>/...` when the file is not found under primary `IMAGES_DIR`
+- **Why**: Ensure product cards can still display images after running ingestion from uploaded datasets, even when base `IMAGES_DIR` points to legacy/sample directories
+- **Behavior**:
+  - Tries primary path first: `IMAGES_DIR / image_type / filename`
+  - If missing, scans upload session folders by most recently modified and serves first matching file
+  - Returns 404 only when no match is found in either location
+
+### 2026-03-03 — Added Chat tab UI integrated with `/api/chat`
+
+- **What**: Implemented a new `Chat` tab in `frontend/index.html` with conversational UI and product-card responses
+- **Why**: Deliver planned chat-style search experience while keeping implementation lightweight (search wrapper, no LLM dependency)
+- **Chat features**:
+  - New tab button + `#chat-panel` with message timeline, input box, image attachment, send button, and clear chat
+  - Sends multipart requests to `POST /api/chat` with text, image, or both
+  - Renders AI response message and top matching product mini-cards (image, wise code, description, score)
+  - Supports attached-image preview and Enter-to-send flow
+  - Added initial assistant greeting and reusable chat bubble rendering helpers
+
+### 2026-03-03 — Added `/api/chat` multimodal search endpoint
+
+- **What**: Added `POST /api/chat` in `backend/main.py` to support chat-style product retrieval for text, image, or both inputs
+- **Why**: Prepare backend for Chat tab UI while reusing existing semantic/visual search logic without introducing LLM dependencies
+- **Behavior**:
+  - Accepts `message` (form text), `image` (file), or both
+  - Text-only path uses semantic search with existing query expansion strategy
+  - Image-only path uses visual search with existing file validation constraints
+  - Image+text path merges and deduplicates by `wise_code`, then returns top 5 by best score
+  - Returns chat-friendly payload: `type`, `input_type`, `message`, `results`, `count`, `elapsed_ms`
+- **Refactor**:
+  - Extracted semantic embedding construction into `_semantic_query_embedding()` and reused it from both `/api/search/semantic` and `/api/chat`
+
+### 2026-03-03 — Added Data Management tab to frontend for ingestion workflow
+
+- **What**: Extended `frontend/index.html` with a new "Data Management" tab and client-side ingestion workflow
+- **Why**: Provide customer-facing upload UI for Excel + images and live index rebuild progress without CLI usage
+- **Frontend updates**:
+  - Refactored tab switching to use `data-tab` attributes (removed hardcoded index logic), enabling scalable multi-tab layout
+  - Added new `#ingest-panel` with three steps: Excel upload, image/ZIP upload, and ingestion start
+  - Added ingestion progress UI (progress bar, status text, error text) and polling integration for `GET /api/ingest/status`
+  - Added ingestion history table wired to `GET /api/ingest/history`
+  - Added drag-and-drop helpers reused across visual upload and ingestion upload zones
+  - Added upload file summaries (selected Excel file, image file count/size, preview list)
+
+### 2026-03-03 — Added Data Ingestion API endpoints with background processing
+
+- **What**: Implemented ingestion upload/start/status/history APIs in `backend/main.py` and added upload path config in `backend/config.py`
+- **Why**: Enable multi-session implementation of the Data Ingestion Web Module so customers can upload files and trigger full index rebuild from UI
+- **Added endpoints**:
+  - `POST /api/ingest/upload` — accepts Excel + image files (individual files and ZIP archives), stores uploads under `data/uploads/` and `data/images/uploaded/`
+  - `POST /api/ingest/start` — starts ingestion in a background thread for a specific `upload_id`
+  - `GET /api/ingest/status` — returns live job state (`idle|starting|running|completed|failed`) with progress/message/error/stats
+  - `GET /api/ingest/history` — returns recent ingestion run history from `data/uploads/history.json`
+- **Implementation details**:
+  - Added ingestion runtime state management with lock-protected in-memory state + progress callback wiring
+  - Added secure ZIP extraction guard against path traversal
+  - Added automatic image-root normalization to ensure `with.background/` and `without.background/` folders exist
+  - On successful ingestion, API now reloads `SearchEngine` so new indexes are available without server restart
+  - Updated health endpoint model label from `CLIP ViT-B/32` to `CLIP ViT-L/14`
+- **Config updates**:
+  - Added `UPLOAD_DIR = data/uploads`
+  - Added `UPLOADED_IMAGES_DIR = data/images/uploaded`
+  - Added `MAX_UPLOAD_SIZE = 500MB`
+
+### 2026-03-03 — Refactored ingestion logic into reusable backend module
+
+- **What**: Added `backend/ingest/pipeline.py` and `backend/ingest/__init__.py` to centralize ingestion helpers and orchestration logic
+- **Why**: Prepare for multi-session implementation of the Data Ingestion Web Module by making ingestion callable from API endpoints (not only CLI)
+- **Details**:
+  - Moved reusable functions out of `scripts/ingest_data.py`: `load_sku_data`, `find_product_images`, `augment_description`, `compute_multi_angle_embedding`
+  - Added `run_ingestion_pipeline(images_dir, excel_path, progress_callback=None)` to run full ingestion and return summary stats
+  - Added optional progress callback contract `(current, total, stage)` for future API status tracking
+  - Updated `scripts/ingest_data.py` to delegate to `run_ingestion_pipeline` while keeping CLI arguments/behavior compatible
+  - Kept `--batch-size` argument as reserved compatibility flag (warns when non-default is provided)
+
 ### 2026-03-03 — Enriched AGENTS.md with project-brief.md context
 
 - **What**: Added "Data & Domain Context" section to `AGENTS.md` with content derived from `project-brief.md`
