@@ -37,6 +37,8 @@ from backend.config import CLIP_MODEL_NAME
 logging.basicConfig(level=logging.INFO, format="%(asctime)s [%(name)s] %(message)s")
 logger = logging.getLogger("fine_tune")
 
+DEFAULT_BASE_MODEL_NAME = "openai/clip-vit-large-patch14"
+
 
 class WiseProductDataset(Dataset):
     """Dataset of (image, augmented_description) pairs for contrastive learning."""
@@ -105,6 +107,30 @@ def find_product_images(images_dir: Path, wise_code: str) -> list[Path]:
     return sorted(results)
 
 
+def resolve_model_name(model_name: str) -> str:
+    """Resolve model name/path and fallback if a local path is missing."""
+    model_path = Path(model_name).expanduser()
+    looks_like_local_path = (
+        model_path.is_absolute()
+        or model_name.startswith(".")
+        or "/" in model_name
+        or "\\" in model_name
+    )
+
+    if looks_like_local_path:
+        if model_path.exists():
+            return str(model_path)
+
+        logger.warning(
+            "Model path not found: %s. Falling back to base model: %s",
+            model_name,
+            DEFAULT_BASE_MODEL_NAME,
+        )
+        return DEFAULT_BASE_MODEL_NAME
+
+    return model_name
+
+
 def main():
     parser = argparse.ArgumentParser(description="Fine-tune CLIP on Wise product data")
     parser.add_argument("--images-dir", required=True)
@@ -143,9 +169,10 @@ def main():
     logger.info(f"Training examples: {len(products)} (from {len(df)} SKUs)")
 
     # Load model
-    logger.info(f"Loading {args.model_name}...")
-    model = CLIPModel.from_pretrained(args.model_name).to(device)
-    processor = CLIPProcessor.from_pretrained(args.model_name)
+    resolved_model_name = resolve_model_name(args.model_name)
+    logger.info(f"Loading {resolved_model_name}...")
+    model = CLIPModel.from_pretrained(resolved_model_name).to(device)
+    processor = CLIPProcessor.from_pretrained(resolved_model_name)
 
     # Try to use LoRA for efficient fine-tuning
     lora_enabled = False

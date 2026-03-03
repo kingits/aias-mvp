@@ -19,6 +19,19 @@
 
 ## Change Log
 
+### 2026-03-03 — Hardened fine-tune model loading fallback for missing local path
+
+- **What**: Updated `scripts/fine_tune_clip.py` to resolve `--model-name` more safely and auto-fallback when a configured local path does not exist
+- **Why**: Fine-tuning crashed at startup when `AIAS_CLIP_MODEL_NAME` pointed to a local merged-model path that was not created yet (e.g., `data/fine_tuned_clip/merged`)
+- **Changes**:
+  - Added `resolve_model_name()` to detect path-like model values
+  - If local model path exists, load it normally
+  - If local model path is missing, log a warning and fallback to base model `openai/clip-vit-large-patch14`
+  - Updated model+processor loading to use resolved model source
+- **Operational result**:
+  - `scripts/fine_tune_clip.py` can start reliably even when runtime env is configured to a not-yet-generated fine-tuned path
+  - Prevents `HFValidationError` / `Incorrect path_or_model_id` on fresh training runs
+
 ### 2026-03-03 — Fixed LoRA model loading path and added merged-model output
 
 - **What**: Updated CLIP loading and fine-tuning workflow to handle LoRA adapter outputs correctly
