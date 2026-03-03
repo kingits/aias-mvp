@@ -1,0 +1,412 @@
+<!DOCTYPE html>
+<html lang="th">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>AI.AS - Smart Product Search</title>
+    <style>
+        :root {
+            --primary: #1F4E79;
+            --primary-light: #2E75B6;
+            --accent: #00A3E0;
+            --bg: #F5F7FA;
+            --card-bg: #FFFFFF;
+            --text: #333333;
+            --text-light: #777777;
+            --border: #E0E4E8;
+            --success: #28A745;
+            --shadow: 0 2px 12px rgba(0,0,0,0.08);
+        }
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+        body { font-family: 'Segoe UI', Arial, sans-serif; background: var(--bg); color: var(--text); }
+
+        /* Header */
+        .header {
+            background: linear-gradient(135deg, var(--primary) 0%, var(--primary-light) 100%);
+            color: white; padding: 20px 0; text-align: center;
+            box-shadow: 0 2px 8px rgba(0,0,0,0.15);
+        }
+        .header h1 { font-size: 28px; font-weight: 700; letter-spacing: 2px; }
+        .header p { font-size: 14px; opacity: 0.85; margin-top: 4px; }
+
+        /* Container */
+        .container { max-width: 1200px; margin: 0 auto; padding: 24px 16px; }
+
+        /* Search Tabs */
+        .search-tabs {
+            display: flex; gap: 0; margin-bottom: 20px;
+            background: white; border-radius: 12px; overflow: hidden;
+            box-shadow: var(--shadow);
+        }
+        .tab-btn {
+            flex: 1; padding: 14px 20px; border: none; background: white;
+            font-size: 15px; font-weight: 600; color: var(--text-light);
+            cursor: pointer; transition: all 0.2s;
+            border-bottom: 3px solid transparent;
+        }
+        .tab-btn.active { color: var(--primary); border-bottom-color: var(--accent); background: #F0F7FF; }
+        .tab-btn:hover { background: #F5F8FC; }
+
+        /* Search Panels */
+        .search-panel { display: none; }
+        .search-panel.active { display: block; }
+
+        /* Text Search */
+        .search-box {
+            display: flex; gap: 12px; margin-bottom: 20px;
+        }
+        .search-input {
+            flex: 1; padding: 14px 18px; border: 2px solid var(--border);
+            border-radius: 10px; font-size: 16px; outline: none; transition: border 0.2s;
+        }
+        .search-input:focus { border-color: var(--accent); }
+        .search-btn {
+            padding: 14px 28px; background: var(--primary);
+            color: white; border: none; border-radius: 10px; font-size: 15px;
+            font-weight: 600; cursor: pointer; transition: background 0.2s;
+            white-space: nowrap;
+        }
+        .search-btn:hover { background: var(--primary-light); }
+        .search-btn:disabled { opacity: 0.6; cursor: not-allowed; }
+
+        /* Image Upload */
+        .upload-zone {
+            border: 2px dashed var(--border); border-radius: 12px;
+            padding: 40px 20px; text-align: center; cursor: pointer;
+            transition: all 0.2s; background: white; margin-bottom: 20px;
+        }
+        .upload-zone:hover, .upload-zone.dragover {
+            border-color: var(--accent); background: #F0FAFF;
+        }
+        .upload-zone .icon { font-size: 48px; margin-bottom: 12px; }
+        .upload-zone p { color: var(--text-light); font-size: 14px; }
+        .upload-zone .label { color: var(--primary); font-weight: 600; font-size: 16px; }
+
+        .preview-container {
+            display: none; text-align: center; margin-bottom: 20px;
+            background: white; border-radius: 12px; padding: 16px;
+            box-shadow: var(--shadow);
+        }
+        .preview-container.active { display: block; }
+        .preview-container img {
+            max-width: 300px; max-height: 250px;
+            border-radius: 8px; border: 1px solid var(--border);
+        }
+
+        /* Results */
+        .results-header {
+            display: flex; justify-content: space-between; align-items: center;
+            margin-bottom: 16px; padding: 0 4px;
+        }
+        .results-header h3 { font-size: 18px; color: var(--primary); }
+        .results-header .meta { font-size: 13px; color: var(--text-light); }
+
+        .results-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
+            gap: 16px;
+        }
+
+        .product-card {
+            background: white; border-radius: 12px; overflow: hidden;
+            box-shadow: var(--shadow); transition: transform 0.2s, box-shadow 0.2s;
+        }
+        .product-card:hover { transform: translateY(-2px); box-shadow: 0 4px 20px rgba(0,0,0,0.12); }
+        .product-card .image-wrapper {
+            height: 200px; background: #F8F9FA; display: flex;
+            align-items: center; justify-content: center; overflow: hidden;
+            position: relative;
+        }
+        .product-card .image-wrapper img {
+            max-width: 100%; max-height: 100%; object-fit: contain;
+        }
+        .product-card .score-badge {
+            position: absolute; top: 8px; right: 8px;
+            background: var(--primary); color: white; padding: 4px 10px;
+            border-radius: 20px; font-size: 12px; font-weight: 600;
+        }
+        .product-card .info { padding: 14px 16px; }
+        .product-card .wise-code {
+            font-size: 14px; font-weight: 700; color: var(--primary);
+            font-family: monospace; margin-bottom: 6px;
+        }
+        .product-card .description {
+            font-size: 13px; color: var(--text-light); line-height: 1.5;
+        }
+        .product-card .unit {
+            font-size: 12px; color: var(--accent); margin-top: 6px; font-weight: 600;
+        }
+        .image-toggle {
+            display: flex; gap: 4px; position: absolute; bottom: 8px; left: 50%;
+            transform: translateX(-50%);
+        }
+        .image-toggle button {
+            padding: 3px 8px; border: 1px solid var(--border); background: white;
+            border-radius: 4px; font-size: 10px; cursor: pointer;
+        }
+        .image-toggle button.active { background: var(--primary); color: white; border-color: var(--primary); }
+
+        /* Loading */
+        .loading { text-align: center; padding: 40px; display: none; }
+        .loading.active { display: block; }
+        .spinner {
+            width: 40px; height: 40px; border: 3px solid var(--border);
+            border-top-color: var(--accent); border-radius: 50%;
+            animation: spin 0.8s linear infinite; margin: 0 auto 12px;
+        }
+        @keyframes spin { to { transform: rotate(360deg); } }
+
+        /* Empty State */
+        .empty-state {
+            text-align: center; padding: 60px 20px; color: var(--text-light);
+        }
+        .empty-state .icon { font-size: 64px; margin-bottom: 16px; }
+
+        /* Status Bar */
+        .status-bar {
+            background: white; border-radius: 10px; padding: 12px 20px;
+            margin-bottom: 20px; box-shadow: var(--shadow);
+            display: flex; justify-content: space-between; align-items: center;
+            font-size: 13px; color: var(--text-light);
+        }
+        .status-dot { display: inline-block; width: 8px; height: 8px; border-radius: 50%; background: var(--success); margin-right: 6px; }
+
+        /* Responsive */
+        @media (max-width: 640px) {
+            .search-box { flex-direction: column; }
+            .results-grid { grid-template-columns: 1fr; }
+            .header h1 { font-size: 22px; }
+        }
+    </style>
+</head>
+<body>
+    <div class="header">
+        <h1>AI.AS</h1>
+        <p>Smart Product Search &mdash; Visual &amp; Semantic Search Engine</p>
+    </div>
+
+    <div class="container">
+        <!-- Status Bar -->
+        <div class="status-bar">
+            <div><span class="status-dot" id="statusDot"></span><span id="statusText">Connecting...</span></div>
+            <div id="productCount">-</div>
+        </div>
+
+        <!-- Search Tabs -->
+        <div class="search-tabs">
+            <button class="tab-btn active" onclick="switchTab('semantic')">
+                &#128269; Semantic Search (Text)
+            </button>
+            <button class="tab-btn" onclick="switchTab('visual')">
+                &#128247; Visual Search (Image)
+            </button>
+        </div>
+
+        <!-- Semantic Search Panel -->
+        <div id="semantic-panel" class="search-panel active">
+            <div class="search-box">
+                <input type="text" class="search-input" id="searchInput"
+                    placeholder="Search products... e.g. 'bearing 30mm', 'cable connector', 'alarm sound'"
+                    onkeydown="if(event.key==='Enter')searchSemantic()">
+                <button class="search-btn" id="searchBtn" onclick="searchSemantic()">Search</button>
+            </div>
+        </div>
+
+        <!-- Visual Search Panel -->
+        <div id="visual-panel" class="search-panel">
+            <div class="upload-zone" id="uploadZone" onclick="document.getElementById('fileInput').click()">
+                <div class="icon">&#128247;</div>
+                <p class="label">Click or drag an image here</p>
+                <p>Supports JPG, PNG, GIF, WebP (max 10MB)</p>
+            </div>
+            <input type="file" id="fileInput" accept="image/*" style="display:none" onchange="handleFileSelect(event)">
+            <div class="preview-container" id="previewContainer">
+                <img id="previewImage" alt="Preview">
+                <div style="margin-top:12px">
+                    <button class="search-btn" onclick="searchVisual()">Search with this image</button>
+                    <button class="search-btn" style="background:#999;margin-left:8px" onclick="clearUpload()">Clear</button>
+                </div>
+            </div>
+        </div>
+
+        <!-- Loading -->
+        <div class="loading" id="loading">
+            <div class="spinner"></div>
+            <p>Searching products with AI...</p>
+        </div>
+
+        <!-- Results -->
+        <div id="resultsSection" style="display:none">
+            <div class="results-header">
+                <h3 id="resultsTitle">Search Results</h3>
+                <span class="meta" id="resultsMeta"></span>
+            </div>
+            <div class="results-grid" id="resultsGrid"></div>
+        </div>
+
+        <!-- Empty State -->
+        <div class="empty-state" id="emptyState">
+            <div class="icon">&#128270;</div>
+            <p>Search for products by typing a description or uploading an image</p>
+        </div>
+    </div>
+
+<script>
+const API_BASE = window.location.origin + '/api';
+let uploadedFile = null;
+
+// Check health
+async function checkHealth() {
+    try {
+        const res = await fetch(`${API_BASE}/health`);
+        const data = await res.json();
+        document.getElementById('statusText').textContent = 'System Online';
+        document.getElementById('statusDot').style.background = '#28A745';
+        document.getElementById('productCount').textContent = `${data.total_products.toLocaleString()} products indexed`;
+    } catch (e) {
+        document.getElementById('statusText').textContent = 'System Offline';
+        document.getElementById('statusDot').style.background = '#DC3545';
+    }
+}
+
+// Tab switching
+function switchTab(tab) {
+    document.querySelectorAll('.tab-btn').forEach((btn, i) => {
+        btn.classList.toggle('active', (tab === 'semantic' && i === 0) || (tab === 'visual' && i === 1));
+    });
+    document.getElementById('semantic-panel').classList.toggle('active', tab === 'semantic');
+    document.getElementById('visual-panel').classList.toggle('active', tab === 'visual');
+}
+
+// Semantic search
+async function searchSemantic() {
+    const query = document.getElementById('searchInput').value.trim();
+    if (!query) return;
+
+    showLoading();
+    try {
+        const res = await fetch(`${API_BASE}/search/semantic?q=${encodeURIComponent(query)}&top_k=10`);
+        const data = await res.json();
+        renderResults(data, `"${query}"`);
+    } catch (e) {
+        alert('Search failed. Please check if the server is running.');
+    }
+    hideLoading();
+}
+
+// Visual search
+async function searchVisual() {
+    if (!uploadedFile) return;
+
+    showLoading();
+    try {
+        const formData = new FormData();
+        formData.append('image', uploadedFile);
+        const res = await fetch(`${API_BASE}/search/visual?top_k=10`, { method: 'POST', body: formData });
+        const data = await res.json();
+        renderResults(data, 'uploaded image');
+    } catch (e) {
+        alert('Search failed. Please check if the server is running.');
+    }
+    hideLoading();
+}
+
+// File handling
+function handleFileSelect(e) {
+    const file = e.target.files[0];
+    if (!file) return;
+    uploadedFile = file;
+    const reader = new FileReader();
+    reader.onload = (ev) => {
+        document.getElementById('previewImage').src = ev.target.result;
+        document.getElementById('previewContainer').classList.add('active');
+        document.getElementById('uploadZone').style.display = 'none';
+    };
+    reader.readAsDataURL(file);
+}
+
+function clearUpload() {
+    uploadedFile = null;
+    document.getElementById('fileInput').value = '';
+    document.getElementById('previewContainer').classList.remove('active');
+    document.getElementById('uploadZone').style.display = 'block';
+}
+
+// Drag and drop
+const uploadZone = document.getElementById('uploadZone');
+uploadZone.addEventListener('dragover', (e) => { e.preventDefault(); uploadZone.classList.add('dragover'); });
+uploadZone.addEventListener('dragleave', () => uploadZone.classList.remove('dragover'));
+uploadZone.addEventListener('drop', (e) => {
+    e.preventDefault(); uploadZone.classList.remove('dragover');
+    if (e.dataTransfer.files.length) {
+        document.getElementById('fileInput').files = e.dataTransfer.files;
+        handleFileSelect({ target: { files: e.dataTransfer.files } });
+    }
+});
+
+// Render results
+function renderResults(data, queryDesc) {
+    const grid = document.getElementById('resultsGrid');
+    const section = document.getElementById('resultsSection');
+    const empty = document.getElementById('emptyState');
+
+    if (!data.results || data.results.length === 0) {
+        grid.innerHTML = '';
+        section.style.display = 'none';
+        empty.innerHTML = '<div class="icon">&#128533;</div><p>No matching products found</p>';
+        empty.style.display = 'block';
+        return;
+    }
+
+    empty.style.display = 'none';
+    section.style.display = 'block';
+    document.getElementById('resultsTitle').textContent = `Results for ${queryDesc}`;
+    document.getElementById('resultsMeta').textContent = `${data.count} results in ${data.elapsed_ms}ms`;
+
+    grid.innerHTML = data.results.map((p, i) => {
+        const imgWith = p.images?.with_bg || '';
+        const imgWithout = p.images?.without_bg || '';
+        const defaultImg = imgWith || imgWithout || '';
+
+        return `
+        <div class="product-card">
+            <div class="image-wrapper">
+                <img src="${defaultImg}" alt="${p.description || ''}"
+                     onerror="this.src='data:image/svg+xml,<svg xmlns=%22http://www.w3.org/2000/svg%22 width=%22200%22 height=%22200%22><rect fill=%22%23f0f0f0%22 width=%22200%22 height=%22200%22/><text x=%2250%25%22 y=%2250%25%22 text-anchor=%22middle%22 fill=%22%23999%22 font-size=%2214%22>No Image</text></svg>'">
+                <div class="score-badge">${(p.score * 100).toFixed(1)}%</div>
+                ${(imgWith && imgWithout) ? `
+                <div class="image-toggle">
+                    <button class="active" onclick="toggleImg(this, '${imgWith}')">BG</button>
+                    <button onclick="toggleImg(this, '${imgWithout}')">No BG</button>
+                </div>` : ''}
+            </div>
+            <div class="info">
+                <div class="wise-code">${p.wise_code || '-'}</div>
+                <div class="description">${p.description || '-'}</div>
+                <div class="unit">${p.unit || ''}</div>
+            </div>
+        </div>`;
+    }).join('');
+}
+
+function toggleImg(btn, src) {
+    const wrapper = btn.closest('.image-wrapper');
+    wrapper.querySelector('img').src = src;
+    wrapper.querySelectorAll('.image-toggle button').forEach(b => b.classList.remove('active'));
+    btn.classList.add('active');
+}
+
+function showLoading() {
+    document.getElementById('loading').classList.add('active');
+    document.getElementById('resultsSection').style.display = 'none';
+    document.getElementById('emptyState').style.display = 'none';
+}
+function hideLoading() {
+    document.getElementById('loading').classList.remove('active');
+}
+
+// Init
+checkHealth();
+</script>
+</body>
+</html>
