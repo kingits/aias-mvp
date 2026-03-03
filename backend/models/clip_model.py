@@ -1,4 +1,6 @@
 """CLIP Model wrapper for image and text embedding generation."""
+
+import json
 import torch
 import numpy as np
 from PIL import Image
@@ -27,12 +29,66 @@ class CLIPEmbedder:
         """Load CLIP model and processor."""
         if self._loaded:
             return
+
         logger.info(f"Loading CLIP model: {self.model_name} on {self.device}")
-        self.model = CLIPModel.from_pretrained(self.model_name).to(self.device)
-        self.processor = CLIPProcessor.from_pretrained(self.model_name)
+
+        model_path = Path(str(self.model_name))
+        if (
+            model_path.exists()
+            and model_path.is_dir()
+            and (model_path / "adapter_config.json").exists()
+        ):
+            self.model, self.processor = self._load_lora_adapter(model_path)
+        else:
+            self.model = CLIPModel.from_pretrained(self.model_name).to(self.device)
+            self.processor = CLIPProcessor.from_pretrained(self.model_name)
+
         self.model.eval()
         self._loaded = True
         logger.info("CLIP model loaded successfully")
+
+    def _load_lora_adapter(self, adapter_dir: Path) -> tuple[CLIPModel, CLIPProcessor]:
+        """Load and merge a LoRA adapter directory into a base CLIP model.
+
+        Args:
+            adapter_dir: Directory containing adapter_config.json and adapter weights.
+
+        Returns:
+            Tuple of merged CLIP model and CLIP processor.
+        """
+        try:
+            from peft import PeftModel
+        except ImportError as exc:
+            raise RuntimeError(
+                "Detected LoRA adapter directory, but peft is not installed. "
+                "Install with: pip install peft>=0.7.0"
+            ) from exc
+
+        config_path = adapter_dir / "adapter_config.json"
+        with open(config_path, "r", encoding="utf-8") as file:
+            adapter_config = json.load(file)
+
+        base_model_name = adapter_config.get("base_model_name_or_path")
+        if not base_model_name:
+            raise ValueError(
+                f"Invalid adapter config: missing base_model_name_or_path in {config_path}"
+            )
+
+        logger.info(
+            f"Detected LoRA adapter at {adapter_dir}. Base model: {base_model_name}"
+        )
+        base_model = CLIPModel.from_pretrained(base_model_name)
+        peft_model = PeftModel.from_pretrained(base_model, str(adapter_dir))
+        merged_model = peft_model.merge_and_unload().to(self.device)
+
+        processor_source = (
+            str(adapter_dir)
+            if (adapter_dir / "preprocessor_config.json").exists()
+            else base_model_name
+        )
+        processor = CLIPProcessor.from_pretrained(processor_source)
+        logger.info("LoRA adapter merged successfully")
+        return merged_model, processor
 
     def _ensure_loaded(self):
         if not self._loaded:
@@ -75,7 +131,9 @@ class CLIPEmbedder:
         """
         self._ensure_loaded()
 
-        inputs = self.processor(text=[text], return_tensors="pt", padding=True, truncation=True).to(self.device)
+        inputs = self.processor(
+            text=[text], return_tensors="pt", padding=True, truncation=True
+        ).to(self.device)
         features = self.model.get_text_features(**inputs)
         embedding = features.cpu().numpy().flatten()
         embedding = embedding / np.linalg.norm(embedding)
@@ -96,7 +154,7 @@ class CLIPEmbedder:
         all_embeddings = []
 
         for i in range(0, len(images), batch_size):
-            batch = images[i:i + batch_size]
+            batch = images[i : i + batch_size]
             pil_batch = []
             for img in batch:
                 if isinstance(img, (str, Path)):
@@ -104,7 +162,9 @@ class CLIPEmbedder:
                 elif isinstance(img, Image.Image):
                     pil_batch.append(img.convert("RGB"))
 
-            inputs = self.processor(images=pil_batch, return_tensors="pt", padding=True).to(self.device)
+            inputs = self.processor(
+                images=pil_batch, return_tensors="pt", padding=True
+            ).to(self.device)
             features = self.model.get_image_features(**inputs)
             embeddings = features.cpu().numpy()
             # Normalize each embedding
@@ -117,6 +177,7 @@ class CLIPEmbedder:
 
 # Global singleton
 _clip_instance = None
+
 
 def get_clip_model() -> CLIPEmbedder:
     global _clip_instance

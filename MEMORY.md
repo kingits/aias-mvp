@@ -19,6 +19,18 @@
 
 ## Change Log
 
+### 2026-03-03 — Fixed LoRA model loading path and added merged-model output
+
+- **What**: Updated CLIP loading and fine-tuning workflow to handle LoRA adapter outputs correctly
+- **Why**: Users hit "model not found/load failed" after fine-tuning because LoRA output can be adapter-only and not directly loadable as a full CLIP model
+- **Changes**:
+  - `backend/models/clip_model.py`: `CLIPEmbedder.load()` now detects adapter directories (`adapter_config.json`), auto-loads base model, applies adapter, and merges weights via `peft`
+  - `scripts/fine_tune_clip.py`: after LoRA training, script now also saves a merged full model to `output_dir/merged` for direct use
+  - `backend/config.py`: `CLIP_MODEL_NAME` now supports env override via `AIAS_CLIP_MODEL_NAME`
+- **Operational result**:
+  - Can point `CLIP_MODEL_NAME` (or `AIAS_CLIP_MODEL_NAME`) to either adapter dir or merged dir
+  - Recommended production path: use merged model directory for simpler deployment
+
 ### 2026-03-03 — Started Sub-task 6: LoRA dependency + evaluation smoke run
 
 - **What**: Added `peft>=0.7.0` to `requirements.txt` and installed `peft` in local virtualenv

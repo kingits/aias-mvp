@@ -18,7 +18,7 @@ IMAGES_DIR = Path(
 )
 
 # CLIP Model
-CLIP_MODEL_NAME = "openai/clip-vit-large-patch14"
+CLIP_MODEL_NAME = os.getenv("AIAS_CLIP_MODEL_NAME", "openai/clip-vit-large-patch14")
 EMBEDDING_DIM = 768
 
 # FAISS

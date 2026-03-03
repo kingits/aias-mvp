@@ -15,6 +15,7 @@ Usage:
 Requirements (additional):
     pip install peft>=0.7.0  # for LoRA
 """
+
 import argparse
 import logging
 import sys
@@ -53,9 +54,12 @@ class WiseProductDataset(Dataset):
         text = f"Industrial spare part: {item['description']}. Product code {item['wise_code']}"
 
         inputs = self.processor(
-            images=image, text=text,
-            return_tensors="pt", padding="max_length",
-            max_length=77, truncation=True,
+            images=image,
+            text=text,
+            return_tensors="pt",
+            padding="max_length",
+            max_length=77,
+            truncation=True,
         )
         return {k: v.squeeze(0) for k, v in inputs.items()}
 
@@ -81,14 +85,22 @@ def find_product_images(images_dir: Path, wise_code: str) -> list[Path]:
     without_bg_dir = images_dir / "without.background"
     if without_bg_dir.exists():
         for f in without_bg_dir.iterdir():
-            if f.stem.upper().startswith(wise_code.upper()) and f.suffix.lower() in {".jpg", ".jpeg", ".png"}:
+            if f.stem.upper().startswith(wise_code.upper()) and f.suffix.lower() in {
+                ".jpg",
+                ".jpeg",
+                ".png",
+            }:
                 results.append(f)
     if not results:
         code_no_dash = wise_code.replace("-", "")
         with_bg_dir = images_dir / "with.background"
         if with_bg_dir.exists():
             for f in with_bg_dir.iterdir():
-                if f.stem.startswith(code_no_dash) and f.suffix.lower() in {".jpg", ".jpeg", ".png"}:
+                if f.stem.startswith(code_no_dash) and f.suffix.lower() in {
+                    ".jpg",
+                    ".jpeg",
+                    ".png",
+                }:
                     results.append(f)
     return sorted(results)
 
@@ -120,11 +132,13 @@ def main():
         if images:
             # Use each image angle as a separate training example
             for img_path in images:
-                products.append({
-                    "wise_code": wise_code,
-                    "description": str(row["description"]).strip(),
-                    "image_path": img_path,
-                })
+                products.append(
+                    {
+                        "wise_code": wise_code,
+                        "description": str(row["description"]).strip(),
+                        "image_path": img_path,
+                    }
+                )
 
     logger.info(f"Training examples: {len(products)} (from {len(df)} SKUs)")
 
@@ -134,28 +148,41 @@ def main():
     processor = CLIPProcessor.from_pretrained(args.model_name)
 
     # Try to use LoRA for efficient fine-tuning
+    lora_enabled = False
     try:
         from peft import LoraConfig, get_peft_model
+
         lora_config = LoraConfig(
-            r=16, lora_alpha=32, lora_dropout=0.1,
+            r=16,
+            lora_alpha=32,
+            lora_dropout=0.1,
             target_modules=["q_proj", "v_proj"],  # attention layers only
         )
         model = get_peft_model(model, lora_config)
+        lora_enabled = True
         trainable = sum(p.numel() for p in model.parameters() if p.requires_grad)
         total = sum(p.numel() for p in model.parameters())
-        logger.info(f"LoRA enabled: training {trainable:,} / {total:,} params ({trainable/total*100:.1f}%)")
+        logger.info(
+            f"LoRA enabled: training {trainable:,} / {total:,} params ({trainable / total * 100:.1f}%)"
+        )
     except ImportError:
-        logger.warning("peft not installed — fine-tuning all parameters (slower). Install with: pip install peft")
+        logger.warning(
+            "peft not installed — fine-tuning all parameters (slower). Install with: pip install peft"
+        )
 
     # Dataset and DataLoader
     dataset = WiseProductDataset(products, processor)
-    loader = DataLoader(dataset, batch_size=args.batch_size, shuffle=True, num_workers=0)
+    loader = DataLoader(
+        dataset, batch_size=args.batch_size, shuffle=True, num_workers=0
+    )
 
     # Training
     optimizer = torch.optim.AdamW(model.parameters(), lr=args.lr, weight_decay=0.01)
     model.train()
 
-    logger.info(f"\nStarting fine-tuning: {args.epochs} epochs, batch_size={args.batch_size}, lr={args.lr}")
+    logger.info(
+        f"\nStarting fine-tuning: {args.epochs} epochs, batch_size={args.batch_size}, lr={args.lr}"
+    )
 
     for epoch in range(args.epochs):
         total_loss = 0
@@ -180,7 +207,9 @@ def main():
 
         avg_loss = total_loss / n_batches
         elapsed = time.time() - start
-        logger.info(f"  Epoch {epoch+1}/{args.epochs}: loss={avg_loss:.4f} ({elapsed:.1f}s)")
+        logger.info(
+            f"  Epoch {epoch + 1}/{args.epochs}: loss={avg_loss:.4f} ({elapsed:.1f}s)"
+        )
 
     # Save fine-tuned model
     output_dir = Path(args.output_dir)
@@ -188,7 +217,21 @@ def main():
     model.save_pretrained(str(output_dir))
     processor.save_pretrained(str(output_dir))
     logger.info(f"\nFine-tuned model saved to: {output_dir}")
-    logger.info("To use: set CLIP_MODEL_NAME in config.py to this path, then re-run ingest_data.py")
+
+    if lora_enabled and hasattr(model, "merge_and_unload"):
+        merged_output_dir = output_dir / "merged"
+        merged_output_dir.mkdir(parents=True, exist_ok=True)
+        merged_model = model.merge_and_unload()
+        merged_model.save_pretrained(str(merged_output_dir))
+        processor.save_pretrained(str(merged_output_dir))
+        logger.info(f"Merged full model saved to: {merged_output_dir}")
+        logger.info(
+            "To use merged model: set CLIP_MODEL_NAME to this path, then re-run ingest_data.py"
+        )
+    else:
+        logger.info(
+            "To use: set CLIP_MODEL_NAME in config.py to this path, then re-run ingest_data.py"
+        )
 
 
 if __name__ == "__main__":
