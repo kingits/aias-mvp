@@ -823,11 +823,16 @@ function appendChatBubble(role, text, results = null) {
     bubble.appendChild(textNode);
 
     if (results && results.length) {
+        const chatTopScore = results[0].score || 1;
+        const chatNormalize = (raw) => {
+            if (!chatTopScore || chatTopScore <= 0) return 0;
+            return Math.min(99.9, (raw / chatTopScore) * 95);
+        };
         const wrap = document.createElement('div');
         wrap.className = 'chat-products';
         wrap.innerHTML = results.map((item) => {
             const img = item.images?.with_bg || item.images?.without_bg || '';
-            const score = item.score ? `${(item.score * 100).toFixed(1)}%` : '-';
+            const score = item.score ? `${chatNormalize(item.score).toFixed(1)}%` : '-';
             const description = item.description || '-';
             return `
                 <div class="chat-product-card">
@@ -905,17 +910,25 @@ function renderResults(data, queryDesc) {
     document.getElementById('resultsTitle').textContent = `Results for ${queryDesc}`;
     document.getElementById('resultsMeta').textContent = `${data.count} results in ${data.elapsed_ms}ms`;
 
+    // Normalize scores: top result maps to ~95%, others scale proportionally
+    const topScore = data.results.length > 0 ? data.results[0].score : 1;
+    const normalizeScore = (raw) => {
+        if (!topScore || topScore <= 0) return 0;
+        return Math.min(99.9, (raw / topScore) * 95);
+    };
+
     grid.innerHTML = data.results.map((p) => {
         const imgWith = p.images?.with_bg || '';
         const imgWithout = p.images?.without_bg || '';
         const defaultImg = imgWith || imgWithout || '';
+        const displayScore = normalizeScore(p.score);
 
         return `
         <div class="product-card">
             <div class="image-wrapper">
                 <img src="${defaultImg}" alt="${p.description || ''}"
                      onerror="this.src='data:image/svg+xml,<svg xmlns=%22http://www.w3.org/2000/svg%22 width=%22200%22 height=%22200%22><rect fill=%22%23f0f0f0%22 width=%22200%22 height=%22200%22/><text x=%2250%25%22 y=%2250%25%22 text-anchor=%22middle%22 fill=%22%23999%22 font-size=%2214%22>No Image</text></svg>'">
-                <div class="score-badge">${(p.score * 100).toFixed(1)}%</div>
+                <div class="score-badge">${displayScore.toFixed(1)}%</div>
                 ${(imgWith && imgWithout) ? `
                 <div class="image-toggle">
                     <button class="active" onclick="toggleImg(this, '${imgWith}')">BG</button>

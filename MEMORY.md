@@ -19,6 +19,16 @@
 
 ## Change Log
 
+### 2026-03-04 — Normalized confidence score display in frontend
+
+- **What**: Added relative score normalization in `frontend/index.html` for search results and chat product cards
+- **Why**: Raw hybrid cosine similarity scores (25-35%) looked confusingly low to users despite correct ranking. Short/vague queries naturally produce low absolute cosine similarity in CLIP.
+- **Changes**:
+  - Added `normalizeScore()` function: maps top result to ~95%, others scale proportionally (`score / topScore * 95`, capped at 99.9%)
+  - Applied to both main search result grid and chat product cards
+- **Behavior**: Scores are now relative to the best match. Top result always ~95%. Rankings unchanged.
+- **File**: `frontend/index.html`
+
 ### 2026-03-04 — Comprehensive fine-tuning accuracy improvements (Phase 1-3)
 
 - **What**: Overhauled fine-tuning pipeline to fix accuracy regressions and improve overall search quality
