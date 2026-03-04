@@ -19,6 +19,13 @@
 
 ## Change Log
 
+### 2026-03-04 — Created VM deployment manual
+
+- **What**: Created comprehensive deployment guide at `VM_DEPLOYMENT.md`
+- **Why**: Needed for deploying the app on a Virtual Machine
+- **Contents**: VM requirements, OS setup, project setup, data preparation, ingestion, server, API reference, optional fine-tuning/evaluation, troubleshooting, systemd + nginx production setup
+- **File**: `VM_DEPLOYMENT.md`
+
 ### 2026-03-04 — Normalized confidence score display in frontend
 
 - **What**: Added relative score normalization in `frontend/index.html` for search results and chat product cards
